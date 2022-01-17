@@ -97,67 +97,6 @@ class PlotClass:
                 plt.legend()
         plt.show()
 
-    def stackedBarchartsMatplotlib(self, xval):
-
-        df = self.dfObj.countDataframe
-
-        if xval == "Category":
-            order1 = self.statusOrder.keys()
-            filterEntry1 = "Status"
-            order2 = self.categoryOrder.keys()
-            filterEntry2 = "Category"
-
-        elif xval == "Status":
-            order1 = self.categoryOrder.keys()
-            filterEntry1 = "Category"
-            order2 = self.statusOrder.keys()
-            filterEntry2 = "Status"
-
-
-        for counter, element1 in enumerate(order1):
-            filteredDF = df[df[filterEntry1] == element1]
-            y = []
-            for element2 in order2:
-                y.append(list(filteredDF[filteredDF[filterEntry2] == element2]["Count"])[0])
-            if counter == 0:
-                plt.bar(order2, y, label=element1)
-                ybottom = y
-            else:
-                plt.bar(order2, y, bottom=ybottom, label=element1)
-                ybottom = np.add(ybottom, y)
-        plt.legend()
-        plt.show()
-
-    def sideBySideBarchart(self):
-
-        df = self.dfObj.countDataframe
-
-        t = len(df["Status"].unique())
-        d = len(df["Category"].unique())
-        w = 0.8
-
-        for n, status in zip(range(1, t+1), self.statusOrder.keys()):
-            filteredDF = df[df["Status"] == status]
-            y = []
-            for category in self.categoryOrder.keys():
-                y.append(list(filteredDF[filteredDF["Category"] == category]["Count"])[0])
-            x = [t * element + w * n for element in range(d)]
-            ax = plt.subplot()
-            plt.bar(x, y, label=status)
-
-            if t % 2 == 0:
-                if n == t/2:
-                    xticks = x
-                elif n == (t/2) + 1:
-                    xticks = np.add(xticks, x)
-                    xticks = xticks/2
-
-                    ax.set_xticks(xticks)
-                    ax.set_xticklabels(self.categoryOrder.keys())
-
-        plt.legend()
-        plt.show()
-
     def pieCharts(self):
 
         df = self.dfObj.countDataframe
@@ -189,8 +128,8 @@ class PlotClass:
         maxQuantile = np.amax(lst)
 
         ax = plt.subplot()
-        sns.regplot(data=df, x="Status", y="Count", scatter_kws={'alpha':0.3})
-        plt.axis([-1, 4, 0, maxQuantile])
+        sns.regplot(data=df, x="Status", y="Count", scatter_kws={'alpha': 0.3})
+        plt.axis([np.amin(df["Status"]) - 1, np.amax(df["Status"]) + 1, 0, maxQuantile])
 
         ax.set_xticks(sorted(list(df["Status"].unique())))
         ax.set_xticklabels(self.statusOrder.keys())
