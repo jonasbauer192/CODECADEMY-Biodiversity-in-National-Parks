@@ -61,10 +61,7 @@ class DataframeClass:
                         {objective: element, "Status": status, "Count": 0}, ignore_index=True)
 
         df = pd.merge(df1, df2)
-        if objective == "Park":
-            df = df.sort_values(by=[objective, "Status"])
-        else:
-            df = df.sort_values(by=[objective, "Status"])
+        df = df.sort_values(by=[objective, "Status"])
         return df
 
     def proportionsDataframe(self):
