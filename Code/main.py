@@ -3,20 +3,24 @@ import seaborn as sns
 import pandas as pd
 import os
 import numpy as np
+from scipy.stats import chi2_contingency
 
 path = "D:\CODECADEMY-Biodiversity-in-National-Parks"
 fileName1 = "observations.csv"
 fileName2 = "species_info.csv"
 
-class dataFrameClass:
+class DataframeClass:
 
     def __init__(self, path, fileName1, fileName2):
         self.path = path
         self.fileName1 = fileName1
         self.fileName2 = fileName2
         self.createDataframe()
+        self.chiSquareDataframe()
         self.cleanDataframe()
-        self.countDataframe()
+        self.categoryDataframe = self.countDataframe("Category")
+        self.parkDataframe = self.countDataframe("Park")
+        self.proportionsDataframe()
         self.overviewDataframe()
 
     def createDataframe(self):
@@ -25,41 +29,57 @@ class dataFrameClass:
         df2 = pd.read_csv(self.fileName2)
         self.dataframe = pd.merge(df1, df2)
 
+    def chiSquareDataframe(self):
+
+        df = self.dataframe[["scientific_name", "category", "conservation_status"]]
+        df.columns = ["Name", "Category", "Status"]
+
+        df = df.fillna(value={"Status": "Safe"})
+        for status in df["Status"].unique():
+            if not status == "Safe":
+                df["Status"] = df["Status"].replace(status, "Not Safe", regex=True)
+
+        self.chiSquareDataframe = df
+
     def cleanDataframe(self):
         self.dataframe = self.dataframe.drop_duplicates(subset=["common_names"])
         self.dataframe = self.dataframe.dropna()
         self.dataframe = self.dataframe.drop(columns=["scientific_name", "common_names"])
         self.dataframe.columns = ["Park", "Observations", "Category", "Status"]
-
-    def countDataframe(self):
-        df1 = self.dataframe.groupby("Category")["Observations"].sum().reset_index()
-
         self.dataframe["Count"] = 1
-        df2 = self.dataframe.groupby(["Category", "Status"])["Count"].sum().reset_index()
-        lst = []
-        for category in df2["Category"].unique():
-            filteredDf = df2[df2["Category"] == category]
+
+    def countDataframe(self, objective):
+        df1 = self.dataframe.groupby(objective)["Observations"].sum().reset_index()
+
+        df2 = self.dataframe.groupby([objective, "Status"])["Count"].sum().reset_index()
+        for element in df2[objective].unique():
+            filteredDf = df2[df2[objective] == element]
             # if the df does not contain a row for a status entry create it and set its count to 0
-            for status in df2["Status"].unique():
+            for status in self.dataframe["Status"].unique():
                 if not status in filteredDf["Status"].unique():
                     df2 = df2.append(
-                        {"Category": category, "Status": status, "Count": 0}, ignore_index=True)
+                        {objective: element, "Status": status, "Count": 0}, ignore_index=True)
 
-        self.countDataframe = pd.merge(df1, df2)
+        df = pd.merge(df1, df2)
+        if objective == "Park":
+            df = df.sort_values(by=[objective, "Status"])
+        else:
+            df = df.sort_values(by=[objective, "Status"])
+        return df
+
+    def proportionsDataframe(self):
+        proportion = lambda row: (row["Count"] / row["Observations"]) * 100
+        self.categoryDataframe["Proportion"] = self.categoryDataframe.apply(proportion, axis=1)
+        self.categoryDataframe.drop(columns=["Observations"])
 
     def overviewDataframe(self):
 
-        proportion = lambda row: (row["Count"]/row["Observations"]) * 100
-        self.countDataframe["Proportion"] = self.countDataframe.apply(proportion, axis=1)
-        self.countDataframe.drop(columns=["Observations"])
-        df1 = self.countDataframe.pivot(
-            index="Category",
-            columns="Status",
-            values="Count").reset_index()
-        df2 = self.countDataframe.pivot(
-            index="Category",
-            columns="Status",
-            values="Proportion").reset_index()
+        for objective in ["Count", "Proportion"]:
+            df = self.categoryDataframe.pivot(
+                index="Category",
+                columns="Status",
+                values=objective).reset_index()
+            df.to_csv(f"{objective} of Status per Category.csv")
 
 class PlotClass:
     def __init__(self, dfObj):
@@ -71,56 +91,61 @@ class PlotClass:
                               "Nonvascular Plant": "tab:purple", "Reptile": "tab:brown",
                               "Vascular Plant": "tab:pink"}
         self.stackedBarcharts()
-        self.pieCharts()
+        self.pieCharts("Category")
+        self.pieCharts("Park")
         self.correlationPlot()
 
     def stackedBarcharts(self):
-
-        scopes = ["Count", "Proportion"]
+        objectives = ["Count", "Proportion"]
         xval = ["Status", "Category"]
-        order = [self.categoryOrder.keys(), self.statusOrder.keys()]
         column2drop = ["Category", "Status"]
         palette = [self.categoryOrder, self.statusOrder]
 
+        plt.figure("Stacked Bar Charts", figsize=(16,9))
         subplotCounter = 1
-        for scope in scopes:
+        for objective in objectives:
             # loop to create a single subplot
             for i in range(len(xval)):
-                df = self.dfObj.countDataframe.copy()
+                df = self.dfObj.categoryDataframe.copy()
                 plt.subplot(2, 2, subplotCounter)
                 subplotCounter += 1
-                for element in order[i]:
-                    plotDF = df.groupby(xval[i])[scope].sum().reset_index()
+                for element in df[column2drop[i]].unique():
+                    plotDF = df.groupby(xval[i])[objective].sum().reset_index()
                     plotDF[column2drop[i]] = element
-                    sns.barplot(data=plotDF, x=xval[i], y=scope, hue=column2drop[i], palette=palette[i])
+                    sns.barplot(data=plotDF, x=xval[i], y=objective, hue=column2drop[i], palette=palette[i])
                     df.drop(df[df[column2drop[i]] == element].index, inplace=True)
                 plt.legend()
-        plt.show()
+        plt.savefig("Stacked Bar Charts.png")
 
-    def pieCharts(self):
+    def pieCharts(self, objective):
+        if objective == "Category":
+            df = self.dfObj.categoryDataframe
+            filterColumn = "Status"
+            legend = "Category"
+        elif objective == "Park":
+            df = self.dfObj.parkDataframe
+            filterColumn = "Park"
+            legend = "Status"
 
-        df = self.dfObj.countDataframe
-        for counter, status in enumerate(self.statusOrder.keys()):
-            filteredDF = df[df["Status"] == status]
-            y = []
-            for category in self.categoryOrder.keys():
-                y.append(list(filteredDF[filteredDF["Category"] == category]["Count"])[0])
+        plt.figure("Pie Charts (" + objective + ")", figsize=(16,9))
+        for counter, element in enumerate(df[filterColumn].unique()):
+            filteredDF = df[df[filterColumn] == element]
 
             plt.subplot(2, 2, counter+1)
 
-            plt.pie(y, autopct="%0.2f%%")
-            plt.legend(self.categoryOrder.keys())
-            plt.title(status)
+            plt.pie(filteredDF["Count"], autopct="%0.2f%%")
+            plt.legend(filteredDF[legend])
+            plt.title(element)
             plt.axis("equal")
-        plt.show()
+        plt.savefig("Pie Charts " + objective + ".png")
 
     def correlationPlot(self):
-
-        df = self.dfObj.countDataframe
+        df = self.dfObj.categoryDataframe
 
         df["Status"] = pd.Categorical(df["Status"], self.statusOrder.keys(), ordered=True)
         df["Status"] = df["Status"].cat.codes
 
+        plt.figure("Correlation Plot", figsize=(16, 9))
         # find the 75% quantile for each "Status" and consider the maximum
         lst = []
         for status in df["Status"].unique():
@@ -134,21 +159,19 @@ class PlotClass:
         ax.set_xticks(sorted(list(df["Status"].unique())))
         ax.set_xticklabels(self.statusOrder.keys())
 
-        plt.show()
+        plt.savefig("Correlation Plot.png")
 
+class HypothesisTestingClass:
+    def __init__(self, dataframe):
+        self.df = dataframe.chiSquareDataframe
+        self.chiSquareTest()
 
+    def chiSquareTest(self):
+        crossTab = pd.crosstab(self.df["Category"], self.df["Status"])
+        chi2, pval, dof, expected = chi2_contingency(crossTab)
 
 if __name__ == '__main__':
 
-    dataframe = dataFrameClass(path, fileName1, fileName2)
+    dataframe = DataframeClass(path, fileName1, fileName2)
     speciesPlot = PlotClass(dataframe)
-
-
-
-
-
-
-
-
-    a = 1
-
+    chiSquareTest = HypothesisTestingClass(dataframe)
